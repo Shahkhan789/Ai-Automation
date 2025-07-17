@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Video Downloader</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="bg-animation">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-download"></i>
+                <h1>Universal Video Downloader</h1>
+            </div>
+            <p class="subtitle">Download videos from YouTube, TikTok, Twitter, Facebook, Instagram and more</p>
+        </header>
+
+        <main class="main-content">
+            <div class="input-section">
+                <div class="url-input-container">
+                    <i class="fas fa-link input-icon"></i>
+                    <input type="url" id="videoUrl" placeholder="Paste your video URL here..." class="url-input">
+                    <button id="analyzeBtn" class="analyze-btn">
+                        <i class="fas fa-search"></i>
+                        Analyze
+                    </button>
+                </div>
+                
+                <div class="supported-platforms">
+                    <span>Supported platforms:</span>
+                    <div class="platform-icons">
+                        <i class="fab fa-youtube" title="YouTube"></i>
+                        <i class="fab fa-tiktok" title="TikTok"></i>
+                        <i class="fab fa-twitter" title="Twitter"></i>
+                        <i class="fab fa-facebook" title="Facebook"></i>
+                        <i class="fab fa-instagram" title="Instagram"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loadingSpinner" class="loading-spinner hidden">
+                <div class="spinner"></div>
+                <p>Analyzing video...</p>
+            </div>
+
+            <div id="videoPreview" class="video-preview hidden">
+                <div class="preview-card">
+                    <div class="preview-image">
+                        <img id="thumbnailImg" src="" alt="Video thumbnail">
+                        <div class="platform-badge">
+                            <i id="platformIcon" class=""></i>
+                            <span id="platformName"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="preview-details">
+                        <h3 id="videoTitle">Video Title</h3>
+                        <div class="video-info">
+                            <span id="videoDuration"><i class="fas fa-clock"></i> Duration</span>
+                            <span id="videoSize"><i class="fas fa-file"></i> Size</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="download-options">
+                    <div class="format-selector">
+                        <h4>Download Format</h4>
+                        <div class="format-tabs">
+                            <button class="format-tab active" data-format="video">
+                                <i class="fas fa-video"></i>
+                                Video
+                            </button>
+                            <button class="format-tab" data-format="audio">
+                                <i class="fas fa-music"></i>
+                                Audio Only
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="quality-selector">
+                        <h4>Quality</h4>
+                        <select id="qualitySelect" class="quality-dropdown">
+                            <option value="highest">Highest Quality</option>
+                            <option value="720p">720p HD</option>
+                            <option value="480p">480p</option>
+                            <option value="360p">360p</option>
+                            <option value="lowest">Lowest Quality</option>
+                        </select>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button id="downloadBtn" class="download-btn">
+                            <i class="fas fa-download"></i>
+                            Download Video
+                        </button>
+                        
+                        <button id="transcriptBtn" class="transcript-btn hidden">
+                            <i class="fas fa-closed-captioning"></i>
+                            Get Transcript
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="downloadProgress" class="download-progress hidden">
+                <div class="progress-card">
+                    <div class="progress-header">
+                        <h4>Downloading...</h4>
+                        <span id="progressPercentage">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill"></div>
+                    </div>
+                    <p id="progressStatus">Preparing download...</p>
+                </div>
+            </div>
+
+            <div id="downloadComplete" class="download-complete hidden">
+                <div class="success-card">
+                    <div class="success-icon">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h3>Download Complete!</h3>
+                    <p>Your video has been downloaded successfully.</p>
+                    <a id="downloadLink" href="#" class="download-link" download>
+                        <i class="fas fa-download"></i>
+                        Download File
+                    </a>
+                </div>
+            </div>
+
+            <div id="transcriptModal" class="modal hidden">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>Video Transcript</h3>
+                        <button id="closeModal" class="close-btn">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="transcriptContent" class="transcript-content">
+                            <!-- Transcript will be loaded here -->
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="copyTranscript" class="copy-btn">
+                            <i class="fas fa-copy"></i>
+                            Copy to Clipboard
+                        </button>
+                        <button id="downloadTranscript" class="download-transcript-btn">
+                            <i class="fas fa-download"></i>
+                            Download as Text
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="errorMessage" class="error-message hidden">
+                <div class="error-card">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h4>Error</h4>
+                    <p id="errorText">Something went wrong. Please try again.</p>
+                    <button id="retryBtn" class="retry-btn">
+                        <i class="fas fa-redo"></i>
+                        Try Again
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2024 Universal Video Downloader. All rights reserved.</p>
+            <div class="footer-links">
+                <a href="#" class="footer-link">Privacy Policy</a>
+                <a href="#" class="footer-link">Terms of Service</a>
+                <a href="#" class="footer-link">Support</a>
+            </div>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
