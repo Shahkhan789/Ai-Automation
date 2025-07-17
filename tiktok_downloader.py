@@ -50,13 +50,73 @@ class TikTokDownloader:
             return url
 
     def get_content(self, url):
-        """Get content from URL"""
+        """Get content from URL with multiple strategies"""
         try:
             # First resolve shortened URLs
             resolved_url = self.resolve_shortened_url(url)
-            response = self.session.get(resolved_url, timeout=30)
-            response.raise_for_status()
-            return response.text
+            
+            # Strategy 1: Standard request
+            try:
+                response = self.session.get(resolved_url, timeout=30)
+                response.raise_for_status()
+                content = response.text
+                if len(content) > 1000:  # Basic content length check
+                    return content
+            except Exception as e:
+                print(f"Standard request failed: {e}")
+            
+            # Strategy 2: Mobile User-Agent
+            try:
+                mobile_headers = {
+                    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0.3 Mobile/15E148 Safari/604.1',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                }
+                
+                temp_session = requests.Session()
+                temp_session.headers.update(mobile_headers)
+                response = temp_session.get(resolved_url, timeout=30)
+                response.raise_for_status()
+                content = response.text
+                if len(content) > 1000:
+                    return content
+            except Exception as e:
+                print(f"Mobile request failed: {e}")
+            
+            # Strategy 3: Different User-Agent with retry
+            try:
+                desktop_headers = {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Sec-Fetch-User': '?1',
+                }
+                
+                temp_session = requests.Session()
+                temp_session.headers.update(desktop_headers)
+                response = temp_session.get(resolved_url, timeout=30)
+                response.raise_for_status()
+                content = response.text
+                if len(content) > 1000:
+                    return content
+            except Exception as e:
+                print(f"Desktop request failed: {e}")
+            
+            # If all strategies fail, raise the last exception
+            raise Exception("All content retrieval strategies failed")
+            
         except Exception as e:
             raise Exception(f"Failed to get content: {str(e)}")
 
@@ -68,156 +128,188 @@ class TikTokDownloader:
             print(f"Original URL: {url}")
             print(f"Resolved URL: {resolved_url}")
             
+            # Add a simple check for valid TikTok URL pattern
+            if not any(domain in resolved_url.lower() for domain in ['tiktok.com', 'tiktokvideo', 'tiktokcdn']):
+                raise Exception("Invalid TikTok URL pattern")
+            
             content = self.get_content(resolved_url)
             
             # Try multiple patterns to extract video information
             video_info = None
+            extraction_methods = []
             
             # Method 1: Look for JSON data in __NEXT_DATA__
-            json_pattern = r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>'
-            json_match = re.search(json_pattern, content, re.DOTALL)
-            
-            if json_match:
-                try:
-                    json_data = json.loads(json_match.group(1))
-                    # Navigate through the JSON structure to find video data
-                    props = json_data.get('props', {})
-                    page_props = props.get('pageProps', {})
-                    item_info = page_props.get('itemInfo', {})
-                    item_struct = item_info.get('itemStruct', {})
-                    
-                    if item_struct:
-                        video_info = {
-                            'title': item_struct.get('desc', 'TikTok Video'),
-                            'video_url': None,
-                            'thumbnail': None,
-                            'duration': None
-                        }
+            try:
+                json_pattern = r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>'
+                json_match = re.search(json_pattern, content, re.DOTALL)
+                
+                if json_match:
+                    try:
+                        json_data = json.loads(json_match.group(1))
+                        # Navigate through the JSON structure to find video data
+                        props = json_data.get('props', {})
+                        page_props = props.get('pageProps', {})
+                        item_info = page_props.get('itemInfo', {})
+                        item_struct = item_info.get('itemStruct', {})
                         
-                        # Extract video URL
-                        video_data = item_struct.get('video', {})
-                        if video_data:
-                            play_addr = video_data.get('playAddr')
-                            if play_addr:
-                                video_info['video_url'] = play_addr
+                        if item_struct:
+                            video_info = {
+                                'title': item_struct.get('desc', 'TikTok Video'),
+                                'video_url': None,
+                                'thumbnail': None,
+                                'duration': None
+                            }
                             
-                            # Get thumbnail
-                            cover = video_data.get('cover')
-                            if cover:
-                                video_info['thumbnail'] = cover
+                            # Extract video URL
+                            video_data = item_struct.get('video', {})
+                            if video_data:
+                                play_addr = video_data.get('playAddr')
+                                download_addr = video_data.get('downloadAddr')
+                                
+                                # Use downloadAddr if available, fallback to playAddr
+                                video_info['video_url'] = download_addr or play_addr
+                                
+                                # Get thumbnail
+                                cover = video_data.get('cover')
+                                if cover:
+                                    video_info['thumbnail'] = cover
+                                
+                                # Get duration
+                                duration = video_data.get('duration')
+                                if duration:
+                                    video_info['duration'] = duration / 1000  # Convert to seconds
                             
-                            # Get duration
-                            duration = video_data.get('duration')
-                            if duration:
-                                video_info['duration'] = duration / 1000  # Convert to seconds
-                        
-                        if video_info['video_url']:
-                            return video_info
-                except json.JSONDecodeError:
-                    pass
+                            if video_info['video_url']:
+                                extraction_methods.append("__NEXT_DATA__")
+                                return video_info
+                    except json.JSONDecodeError as e:
+                        print(f"Failed to parse __NEXT_DATA__ JSON: {e}")
+            except Exception as e:
+                print(f"Method 1 (__NEXT_DATA__) failed: {e}")
             
             # Method 2: Look for SIGI_STATE data
-            sigi_pattern = r'<script id="SIGI_STATE" type="application/json">(.*?)</script>'
-            sigi_match = re.search(sigi_pattern, content, re.DOTALL)
-            
-            if sigi_match:
-                try:
-                    sigi_data = json.loads(sigi_match.group(1))
-                    # Navigate through SIGI_STATE structure
-                    app_context = sigi_data.get('AppContext', {})
-                    item_module = sigi_data.get('ItemModule', {})
-                    
-                    for key, item in item_module.items():
-                        if isinstance(item, dict) and 'video' in item:
-                            video_data = item.get('video', {})
-                            if video_data:
-                                video_info = {
-                                    'title': item.get('desc', 'TikTok Video'),
-                                    'video_url': video_data.get('playAddr', ''),
-                                    'thumbnail': video_data.get('cover', ''),
-                                    'duration': video_data.get('duration', 0) / 1000 if video_data.get('duration') else None
-                                }
-                                if video_info['video_url']:
-                                    return video_info
-                except json.JSONDecodeError:
-                    pass
+            try:
+                sigi_pattern = r'<script id="SIGI_STATE" type="application/json">(.*?)</script>'
+                sigi_match = re.search(sigi_pattern, content, re.DOTALL)
+                
+                if sigi_match:
+                    try:
+                        sigi_data = json.loads(sigi_match.group(1))
+                        # Navigate through SIGI_STATE structure
+                        app_context = sigi_data.get('AppContext', {})
+                        item_module = sigi_data.get('ItemModule', {})
+                        
+                        for key, item in item_module.items():
+                            if isinstance(item, dict) and 'video' in item:
+                                video_data = item.get('video', {})
+                                if video_data:
+                                    video_info = {
+                                        'title': item.get('desc', 'TikTok Video'),
+                                        'video_url': video_data.get('downloadAddr') or video_data.get('playAddr', ''),
+                                        'thumbnail': video_data.get('cover', ''),
+                                        'duration': video_data.get('duration', 0) / 1000 if video_data.get('duration') else None
+                                    }
+                                    if video_info['video_url']:
+                                        extraction_methods.append("SIGI_STATE")
+                                        return video_info
+                    except json.JSONDecodeError as e:
+                        print(f"Failed to parse SIGI_STATE JSON: {e}")
+            except Exception as e:
+                print(f"Method 2 (SIGI_STATE) failed: {e}")
             
             # Method 3: Look for video data in various script tags
-            script_patterns = [
-                r'window\.__INITIAL_STATE__\s*=\s*({.*?});',
-                r'window\.__DEFAULT_SCOPE__\s*=\s*({.*?});',
-                r'window\.SIGI_STATE\s*=\s*({.*?});'
-            ]
-            
-            for pattern in script_patterns:
-                matches = re.findall(pattern, content, re.DOTALL)
-                for match in matches:
-                    try:
-                        data = json.loads(match)
-                        # Look for video information in the data structure
-                        video_info = self.extract_from_data_structure(data)
-                        if video_info and video_info.get('video_url'):
-                            return video_info
-                    except:
-                        continue
-            
-            # Fallback method - look for downloadAddr pattern
-            download_addr_pattern = r'"downloadAddr":"([^"]+)"'
-            match = re.search(download_addr_pattern, content)
-            
-            if match:
-                video_url = match.group(1)
-                # Decode URL
-                video_url = video_url.replace('\\u002F', '/')
-                video_url = unquote(video_url)
+            try:
+                script_patterns = [
+                    r'window\.__INITIAL_STATE__\s*=\s*({.*?});',
+                    r'window\.__DEFAULT_SCOPE__\s*=\s*({.*?});',
+                    r'window\.SIGI_STATE\s*=\s*({.*?});'
+                ]
                 
-                return {
-                    'title': 'TikTok Video',
-                    'video_url': video_url,
-                    'thumbnail': None,
-                    'duration': None
-                }
+                for pattern in script_patterns:
+                    matches = re.findall(pattern, content, re.DOTALL)
+                    for match in matches:
+                        try:
+                            data = json.loads(match)
+                            # Look for video information in the data structure
+                            video_info = self.extract_from_data_structure(data)
+                            if video_info and video_info.get('video_url'):
+                                extraction_methods.append("script_tags")
+                                return video_info
+                        except Exception as e:
+                            print(f"Script pattern parsing failed: {e}")
+                            continue
+            except Exception as e:
+                print(f"Method 3 (script tags) failed: {e}")
             
-            # Final fallback - try to extract any video-like URLs
-            video_url_patterns = [
-                r'"playAddr":"([^"]+)"',
-                r'"downloadAddr":"([^"]+)"',
-                r'"playURL":"([^"]+)"',
-                r'https://[^"]*\.mp4[^"]*'
-            ]
-            
-            for pattern in video_url_patterns:
-                matches = re.findall(pattern, content)
-                for match in matches:
-                    if isinstance(match, str) and ('tiktokcdn' in match or 'tiktokvideo' in match or '.mp4' in match):
-                        video_url = match.replace('\\u002F', '/').replace('\\', '')
+            # Method 4: Direct regex patterns for video URLs
+            try:
+                # Fallback method - look for downloadAddr pattern
+                download_patterns = [
+                    r'"downloadAddr":"([^"]+)"',
+                    r'"playAddr":"([^"]+)"',
+                    r'"playURL":"([^"]+)"'
+                ]
+                
+                for pattern in download_patterns:
+                    match = re.search(pattern, content)
+                    if match:
+                        video_url = match.group(1)
+                        # Decode URL
+                        video_url = video_url.replace('\\u002F', '/').replace('\\/', '/')
                         video_url = unquote(video_url)
                         
-                        # Extract title if possible
-                        title_patterns = [
-                            r'"desc":"([^"]+)"',
-                            r'"title":"([^"]+)"',
-                            r'<title>([^<]+)</title>'
-                        ]
-                        
-                        title = 'TikTok Video'
-                        for title_pattern in title_patterns:
-                            title_match = re.search(title_pattern, content)
-                            if title_match:
-                                title = title_match.group(1)
-                                break
-                        
-                        return {
-                            'title': title,
-                            'video_url': video_url,
-                            'thumbnail': None,
-                            'duration': None
-                        }
+                        # Basic validation - should be a proper video URL
+                        if 'http' in video_url and ('tiktok' in video_url or '.mp4' in video_url):
+                            # Try to extract title
+                            title = self.extract_title_from_content(content)
+                            
+                            extraction_methods.append("direct_regex")
+                            return {
+                                'title': title,
+                                'video_url': video_url,
+                                'thumbnail': None,
+                                'duration': None
+                            }
+            except Exception as e:
+                print(f"Method 4 (direct regex) failed: {e}")
             
-            raise Exception("Could not extract video information")
+            # Method 5: Final fallback - try to extract any video-like URLs
+            try:
+                video_url_patterns = [
+                    r'https://[^"]*tiktokcdn[^"]*\.mp4[^"]*',
+                    r'https://[^"]*tiktokvideo[^"]*\.mp4[^"]*',
+                    r'https://[^"]*\.tiktokv\.com[^"]*\.mp4[^"]*',
+                    r'https://[^"]*\.musical\.ly[^"]*\.mp4[^"]*'
+                ]
+                
+                for pattern in video_url_patterns:
+                    matches = re.findall(pattern, content)
+                    for match in matches:
+                        if isinstance(match, str) and '.mp4' in match:
+                            video_url = match.replace('\\u002F', '/').replace('\\', '')
+                            video_url = unquote(video_url)
+                            
+                            # Extract title if possible
+                            title = self.extract_title_from_content(content)
+                            
+                            extraction_methods.append("fallback_patterns")
+                            return {
+                                'title': title,
+                                'video_url': video_url,
+                                'thumbnail': None,
+                                'duration': None
+                            }
+            except Exception as e:
+                print(f"Method 5 (fallback patterns) failed: {e}")
+            
+            # If we get here, no extraction method worked
+            print(f"All extraction methods failed. Tried: {extraction_methods}")
+            raise Exception("Could not extract video information from any available method")
             
         except Exception as e:
-            raise Exception(f"Failed to extract video info: {str(e)}")
+            error_msg = str(e)
+            print(f"Video info extraction completely failed: {error_msg}")
+            raise Exception(f"Failed to extract video info: {error_msg}")
 
     def extract_from_data_structure(self, data):
         """Extract video information from nested data structures"""
@@ -338,6 +430,28 @@ class TikTokDownloader:
             
         except Exception as e:
             raise Exception(f"Failed to process TikTok URL: {str(e)}")
+
+    def extract_title_from_content(self, content):
+        """Extract title from page content using various patterns"""
+        title_patterns = [
+            r'"desc":"([^"]+)"',
+            r'"title":"([^"]+)"',
+            r'<title>([^<]+)</title>',
+            r'property="og:title" content="([^"]+)"',
+            r'name="description" content="([^"]+)"'
+        ]
+        
+        for pattern in title_patterns:
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                title = match.group(1)
+                # Clean up the title
+                title = title.replace('\\n', ' ').replace('\\t', ' ')
+                title = re.sub(r'\s+', ' ', title).strip()
+                if title and title != 'TikTok':
+                    return title
+        
+        return 'TikTok Video'
 
 # Example usage
 if __name__ == "__main__":

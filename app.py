@@ -251,28 +251,55 @@ def analyze_tiktok_video(url):
         downloader = TikTokDownloader()
         
         # First resolve the URL to get the actual TikTok URL
-        resolved_url = downloader.resolve_shortened_url(url)
+        try:
+            resolved_url = downloader.resolve_shortened_url(url)
+        except:
+            resolved_url = url
         
-        # Try to extract video info
+        # Initialize default values
+        title = 'TikTok Video'
+        thumbnail = None
+        duration = None
+        warning_msg = None
+        
+        # Try to extract video info with multiple fallback attempts
+        info_extraction_success = False
+        
         try:
             video_info = downloader.extract_video_info(url)
-            title = video_info.get('title', 'TikTok Video')
-            thumbnail = video_info.get('thumbnail')
-            duration = video_info.get('duration')
-        except:
-            # Fallback: provide basic info even if extraction fails
-            title = 'TikTok Video'
-            thumbnail = None
-            duration = None
-            
-            # Try to extract username from resolved URL
-            import re
-            username_match = re.search(r'@([^/]+)', resolved_url)
-            if username_match:
-                username = username_match.group(1)
-                title = f"TikTok Video by @{username}"
+            if video_info and video_info.get('video_url'):
+                title = video_info.get('title', title)
+                thumbnail = video_info.get('thumbnail')
+                duration = video_info.get('duration')
+                info_extraction_success = True
+        except Exception as extract_error:
+            print(f"Video info extraction failed: {str(extract_error)}")
+            # Continue with fallback approach
         
-        return jsonify({
+        # If extraction failed, try to get basic info from URL
+        if not info_extraction_success:
+            try:
+                import re
+                # Try to extract username from resolved URL
+                username_match = re.search(r'@([^/]+)', resolved_url)
+                if username_match:
+                    username = username_match.group(1)
+                    title = f"TikTok Video by @{username}"
+                
+                # Try to extract video ID for more specific title
+                video_id_match = re.search(r'/video/(\d+)', resolved_url)
+                if video_id_match:
+                    video_id = video_id_match.group(1)
+                    if username_match:
+                        title = f"TikTok Video by @{username_match.group(1)} (ID: {video_id[:8]}...)"
+                    else:
+                        title = f"TikTok Video (ID: {video_id[:8]}...)"
+                
+                warning_msg = "Video analysis limited due to TikTok's anti-scraping measures. Download may still work."
+            except:
+                warning_msg = "Basic video analysis failed. Download functionality may be limited."
+        
+        response_data = {
             'platform': 'tiktok',
             'title': title,
             'thumbnail': thumbnail,
@@ -283,11 +310,19 @@ def analyze_tiktok_video(url):
             'transcript_available': False,
             'resolved_url': resolved_url,
             'note': 'TikTok video detected. Download functionality available.'
-        })
+        }
+        
+        if warning_msg:
+            response_data['warning'] = warning_msg
+        
+        return jsonify(response_data)
     
     except Exception as e:
-        # Even if everything fails, still recognize it as TikTok
-        if 'tiktok.com' in url.lower() or 'vm.tiktok.com' in url.lower():
+        # Final fallback - even if everything fails, still recognize it as TikTok
+        error_message = str(e)
+        print(f"TikTok analysis completely failed: {error_message}")
+        
+        if any(domain in url.lower() for domain in ['tiktok.com', 'vm.tiktok.com', 'vt.tiktok.com', 'm.tiktok.com']):
             return jsonify({
                 'platform': 'tiktok',
                 'title': 'TikTok Video',
@@ -297,10 +332,12 @@ def analyze_tiktok_video(url):
                     {'quality': 'default', 'type': 'video', 'mime_type': 'video/mp4'}
                 ],
                 'transcript_available': False,
-                'note': 'TikTok video detected. Basic download functionality available.',
-                'warning': 'Full analysis unavailable due to TikTok anti-scraping measures.'
+                'note': 'TikTok video detected. Download functionality may be limited.',
+                'warning': 'Full analysis unavailable. TikTok has strong anti-scraping measures.',
+                'debug_info': f'Analysis error: {error_message}'
             })
-        return jsonify({'error': f'Failed to analyze TikTok video: {str(e)}'}), 500
+        
+        return jsonify({'error': f'Failed to analyze TikTok video: {error_message}'}), 500
 
 @app.route('/api/download', methods=['POST'])
 def download_video():
