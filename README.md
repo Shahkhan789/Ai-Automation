@@ -11,6 +11,9 @@ A modern, feature-rich web application for downloading videos from multiple soci
   - Mobile URLs (m.youtube.com/...)
   - Short URLs (youtu.be/...)
 - **TikTok** - Video download with metadata extraction
+  - Regular URLs (tiktok.com/@user/video/...)
+  - Shortened URLs (vm.tiktok.com/..., vt.tiktok.com/...)
+  - Mobile URLs (m.tiktok.com/...)
 - **Twitter** - Video download support
 - **Facebook** - Video download support
 - **Instagram** - Video/photo download support

@@ -276,6 +276,11 @@ function updateVideoPreview(data) {
     elements.videoTitle.textContent = data.title || 'Video Title';
     elements.videoDuration.innerHTML = `<i class="fas fa-clock"></i> ${formatDuration(data.duration)}`;
     
+    // Show additional info for TikTok videos
+    if (data.platform === 'tiktok' && data.resolved_url) {
+        elements.videoTitle.innerHTML += ` <small style="color: #666; font-size: 0.8em;">(Resolved from short URL)</small>`;
+    }
+    
     // Update quality options
     updateQualityOptions(data.formats);
     
