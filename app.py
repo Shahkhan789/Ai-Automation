@@ -26,9 +26,15 @@ for folder in [UPLOAD_FOLDER, TEMP_FOLDER]:
 
 def extract_video_id(youtube_url):
     """Extract video ID from YouTube URL"""
-    pattern = r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([^&\n?#]+)'
+    # Updated pattern to handle YouTube Shorts URLs and validate length
+    pattern = r'(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})'
     match = re.search(pattern, youtube_url)
-    return match.group(1) if match else None
+    if match:
+        video_id = match.group(1)
+        # Ensure the video ID is exactly 11 characters (YouTube standard)
+        if len(video_id) == 11:
+            return video_id
+    return None
 
 def detect_platform(url):
     """Detect the social media platform from URL"""
@@ -82,41 +88,123 @@ def analyze_video():
 def analyze_youtube_video(url):
     """Analyze YouTube video and return metadata"""
     try:
-        yt = YouTube(url)
+        # First validate the URL and extract video ID
         video_id = extract_video_id(url)
+        if not video_id:
+            return jsonify({
+                'error': 'Invalid YouTube URL. Please make sure the URL is correct and contains a valid video ID.'
+            }), 400
         
-        # Check if transcript is available
-        transcript_available = False
+        # Try pytube first
         try:
-            YouTubeTranscriptApi.get_transcript(video_id)
-            transcript_available = True
-        except:
-            pass
+            yt = YouTube(url)
+            
+            # Check if transcript is available
+            transcript_available = False
+            try:
+                YouTubeTranscriptApi.get_transcript(video_id)
+                transcript_available = True
+            except:
+                pass
+            
+            # Get available formats
+            formats = []
+            for stream in yt.streams:
+                if stream.mime_type:
+                    formats.append({
+                        'itag': stream.itag,
+                        'quality': stream.resolution or stream.abr,
+                        'type': 'video' if stream.resolution else 'audio',
+                        'mime_type': stream.mime_type,
+                        'filesize': stream.filesize
+                    })
+            
+            return jsonify({
+                'platform': 'youtube',
+                'title': yt.title,
+                'thumbnail': yt.thumbnail_url,
+                'duration': yt.length,
+                'formats': formats,
+                'transcript_available': transcript_available,
+                'video_id': video_id
+            })
         
-        # Get available formats
-        formats = []
-        for stream in yt.streams:
-            if stream.mime_type:
-                formats.append({
-                    'itag': stream.itag,
-                    'quality': stream.resolution or stream.abr,
-                    'type': 'video' if stream.resolution else 'audio',
-                    'mime_type': stream.mime_type,
-                    'filesize': stream.filesize
-                })
-        
-        return jsonify({
-            'platform': 'youtube',
-            'title': yt.title,
-            'thumbnail': yt.thumbnail_url,
-            'duration': yt.length,
-            'formats': formats,
-            'transcript_available': transcript_available,
-            'video_id': video_id
-        })
+        except Exception as pytube_error:
+            # Fallback to basic video information when pytube fails
+            return analyze_youtube_fallback(video_id, pytube_error)
     
     except Exception as e:
-        return jsonify({'error': f'Failed to analyze YouTube video: {str(e)}'}), 500
+        error_message = str(e)
+        # Check for specific pytube errors
+        if 'regex_search' in error_message:
+            return jsonify({
+                'error': 'Unable to extract video information. The video may be private, deleted, or the URL is invalid.'
+            }), 400
+        elif 'Video unavailable' in error_message:
+            return jsonify({
+                'error': 'This video is unavailable. It may be private, deleted, or restricted in your region.'
+            }), 400
+        elif 'age-restricted' in error_message.lower():
+            return jsonify({
+                'error': 'This video is age-restricted and cannot be analyzed.'
+            }), 400
+        else:
+                         return jsonify({
+                 'error': f'Failed to analyze YouTube video: {error_message}'
+             }), 500
+
+def analyze_youtube_fallback(video_id, original_error):
+    """Fallback analysis when pytube fails"""
+    try:
+        # Use YouTube oEmbed API for basic video information
+        oembed_url = f"https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v={video_id}&format=json"
+        response = requests.get(oembed_url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            # Check if transcript is available (this might still work)
+            transcript_available = False
+            try:
+                YouTubeTranscriptApi.get_transcript(video_id)
+                transcript_available = True
+            except:
+                pass
+            
+            return jsonify({
+                'platform': 'youtube',
+                'title': data.get('title', 'YouTube Video'),
+                'thumbnail': data.get('thumbnail_url'),
+                'duration': None,  # oEmbed doesn't provide duration
+                'formats': [],  # Can't get format info without pytube
+                'transcript_available': transcript_available,
+                'video_id': video_id,
+                'warning': 'Limited information available due to YouTube API restrictions. Download functionality may be affected.'
+            })
+        else:
+            # If oEmbed also fails, return minimal info
+            return jsonify({
+                'platform': 'youtube',
+                'title': f'YouTube Video ({video_id})',
+                'thumbnail': f'https://img.youtube.com/vi/{video_id}/maxresdefault.jpg',
+                'duration': None,
+                'formats': [],
+                'transcript_available': False,
+                'video_id': video_id,
+                'warning': 'Video information unavailable due to YouTube API restrictions.'
+            })
+    
+    except Exception as fallback_error:
+        # If everything fails, provide a helpful error message
+        error_message = str(original_error)
+        if 'HTTP Error 400' in error_message or 'HTTP Error 403' in error_message:
+            return jsonify({
+                'error': 'YouTube is currently blocking video analysis requests. This is a known issue with YouTube\'s recent changes. Please try again later or use a different video.'
+            }), 503  # Service Unavailable
+        else:
+            return jsonify({
+                'error': f'Unable to analyze video due to YouTube restrictions: {error_message}'
+            }), 400
 
 def analyze_tiktok_video(url):
     """Analyze TikTok video and return metadata"""
