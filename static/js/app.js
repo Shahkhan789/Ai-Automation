@@ -276,6 +276,16 @@ function updateVideoPreview(data) {
     elements.videoTitle.textContent = data.title || 'Video Title';
     elements.videoDuration.innerHTML = `<i class="fas fa-clock"></i> ${formatDuration(data.duration)}`;
     
+    // Show warning message if present
+    const warningElement = document.getElementById('warningMessage');
+    const warningText = document.getElementById('warningText');
+    if (data.warning) {
+        warningText.textContent = data.warning;
+        warningElement.classList.remove('hidden');
+    } else {
+        warningElement.classList.add('hidden');
+    }
+    
     // Update quality options
     updateQualityOptions(data.formats);
     
