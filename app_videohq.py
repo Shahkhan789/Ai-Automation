@@ -238,6 +238,8 @@ def analyze_smart():
             result = analyze_youtube_advanced(url)
         elif platform == 'tiktok':
             result = analyze_tiktok_advanced(url)
+        elif platform == 'instagram':
+            result = analyze_instagram_advanced(url)
         else:
             result = analyze_generic_video(url, platform)
         
@@ -360,6 +362,39 @@ def analyze_tiktok_advanced(url):
             'available_qualities': [{'resolution': '480p', 'type': 'standard'}],
             'transcript_available': False,
             'warning': 'Limited analysis due to TikTok restrictions'
+        }
+
+def analyze_instagram_advanced(url):
+    """Advanced Instagram analysis"""
+    try:
+        from instagram_downloader import InstagramDownloader
+        downloader = InstagramDownloader()
+        
+        # Use the Instagram analyzer
+        video_info = downloader.extract_video_info(url)
+        
+        return {
+            'platform': 'instagram',
+            'title': video_info.get('title', 'Instagram Video'),
+            'thumbnail': video_info.get('thumbnail'),
+            'duration': video_info.get('duration'),
+            'available_qualities': [
+                {'resolution': '480p', 'type': 'mobile'},
+                {'resolution': '720p', 'type': 'hd'},
+                {'resolution': '1080p', 'type': 'full_hd'},
+            ],
+            'transcript_available': False,
+            'enhancement_potential': 'Good - Instagram videos benefit from AI upscaling'
+        }
+        
+    except Exception as e:
+        logger.warning(f"Instagram detailed analysis failed: {e}")
+        return {
+            'platform': 'instagram',
+            'title': 'Instagram Video',
+            'available_qualities': [{'resolution': '480p', 'type': 'standard'}],
+            'transcript_available': False,
+            'warning': 'Limited analysis due to Instagram restrictions'
         }
 
 def analyze_generic_video(url, platform):

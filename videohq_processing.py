@@ -24,6 +24,8 @@ def process_video_background(process_id, url, quality, platform, processing_queu
             download_result = download_youtube_background(url, UPLOAD_FOLDER)
         elif platform == 'tiktok':
             download_result = download_tiktok_background(url, UPLOAD_FOLDER)
+        elif platform == 'instagram':
+            download_result = download_instagram_background(url, UPLOAD_FOLDER)
         else:
             raise Exception(f"Platform {platform} not supported yet")
         
@@ -111,6 +113,24 @@ def download_tiktok_background(url, upload_folder):
         
     except Exception as e:
         raise Exception(f"TikTok download failed: {str(e)}")
+
+def download_instagram_background(url, upload_folder):
+    """Download Instagram video in background"""
+    try:
+        from instagram_downloader import InstagramDownloader
+        downloader = InstagramDownloader()
+        result = downloader.process_instagram_url(url, upload_folder)
+        
+        return {
+            'filename': result['filename'],
+            'filepath': result['filepath'],
+            'filesize': result['filesize'],
+            'title': result.get('title', 'Instagram Video'),
+            'platform': 'instagram'
+        }
+        
+    except Exception as e:
+        raise Exception(f"Instagram download failed: {str(e)}")
 
 def simulate_ai_enhancement(input_path, target_quality, quality_configs, progress_callback=None):
     """Simulate AI video enhancement process"""
