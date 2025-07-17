@@ -6,6 +6,10 @@ A modern, feature-rich web application for downloading videos from multiple soci
 
 ### Supported Platforms
 - **YouTube** - Full support with quality options and transcript extraction
+  - Regular videos (youtube.com/watch?v=...)
+  - YouTube Shorts (youtube.com/shorts/...)
+  - Mobile URLs (m.youtube.com/...)
+  - Short URLs (youtu.be/...)
 - **TikTok** - Video download with metadata extraction
 - **Twitter** - Video download support
 - **Facebook** - Video download support
@@ -250,6 +254,8 @@ Check application status.
 4. **YouTube download fails**
    - Check if pytube is up to date
    - Some videos may be region-restricted
+   - YouTube Shorts may require special handling (automatically converted)
+   - Age-restricted videos may not be accessible
 
 ### Debug Mode
 Enable debug mode for detailed error messages:
